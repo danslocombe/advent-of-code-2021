@@ -1,4 +1,6 @@
 const std = @import("std");
+const dan_lib = @import("dan_lib");
+const Lines = dan_lib.Lines;
 const print = std.debug.print;
 
 // TODO somewhere in the stdlib?
@@ -30,35 +32,18 @@ pub fn main() !void {
 
     var allocator = &gpa.allocator;
 
-    const input = try std.fs.cwd().readFileAlloc(allocator, "day1_input.txt", u32_max);
-    defer allocator.free(input);
-    print("Read {d} bytes\n", .{input.len});
+    var input = try Lines.from_file(allocator, std.fs.cwd(), "day1_input.txt");
+    defer(input.deinit(allocator));
 
     var sonar = Sonar.new();
 
-    var line_start : usize = 0;
-    for (input) |c, i| {
-        if (c == @intCast(u8, '\n')) {
-            const parsed = try parse(input, line_start, i);
-            if (parsed) |p| {
-                sonar.bleep_ocean(p);
-            }
-            line_start = i+1;
+    for (dan_lib.range(input.len())) |_, i| {
+        const line = input.get(i);
+        if (line) |l| {
+            const parsed = try std.fmt.parseInt(u32, l, 10);
+            sonar.bleep_ocean(parsed);
         }
     }
 
-    const last = try parse(input, line_start, input.len);
-    if (last) |p| {
-        sonar.bleep_ocean(p);
-    }
-
     print("Measured {d} increases", .{sonar.increases});
-}
-
-fn parse(input : []u8, start : usize, end : usize) !?u32 {
-    if (end-start == 0) {
-        return null;
-    }
-
-    return try std.fmt.parseInt(u32, input[start..end], 10);
 }

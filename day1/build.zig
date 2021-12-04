@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const pkg_lib = std.build.Pkg {
+    .name = "dan_lib",
+    .path = std.build.FileSource { .path = "../lib/src/main.zig", },
+};
+
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -12,6 +17,7 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("day1", "src/main.zig");
+    exe.addPackage(pkg_lib);
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
