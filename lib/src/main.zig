@@ -77,6 +77,26 @@ pub const Lines = struct {
     pub fn len(self : Lines) usize {
         return self.lines.items.len;
     }
+
+    pub const Iterator = struct {
+        lines : Lines,
+        pos : ?usize,
+
+        pub fn init(lines : Lines) Iterator {
+            return .{.lines = lines, .pos = null};
+        }
+
+        pub fn next(self : *Iterator) ?[] const u8 {
+            if (self.pos == null)
+            {
+                self.pos = 0;
+            }
+
+            const str = self.lines.get(self.pos.?);
+            self.pos.? += 1;
+            return str;
+        }
+    };
 };
 
 // Not in stdlib for some readon :(

@@ -3,9 +3,6 @@ const dan_lib = @import("dan_lib");
 const Lines = dan_lib.Lines;
 const print = std.debug.print;
 
-// TODO somewhere in the stdlib?
-const u32_max = 4294967295;
-
 const Sonar = struct {
     prev_value : ?u32,
     increases : u32,
@@ -37,12 +34,10 @@ pub fn main() !void {
 
     var sonar = Sonar.new();
 
-    for (dan_lib.range(input.len())) |_, i| {
-        const line = input.get(i);
-        if (line) |l| {
-            const parsed = try std.fmt.parseInt(u32, l, 10);
-            sonar.bleep_ocean(parsed);
-        }
+    var iter = Lines.Iterator.init(input);
+    while (iter.next()) |line| {
+        const parsed = try std.fmt.parseInt(u32, line, 10);
+        sonar.bleep_ocean(parsed);
     }
 
     print("Measured {d} increases", .{sonar.increases});
