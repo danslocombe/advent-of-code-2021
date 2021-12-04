@@ -40,5 +40,22 @@ pub fn main() !void {
         sonar.bleep_ocean(parsed);
     }
 
-    print("Measured {d} increases", .{sonar.increases});
+    print("Part 1 Measured {d} increases\n", .{sonar.increases});
+
+    sonar = Sonar.new();
+
+    var prev_1 : ?u32 = null;
+    var prev_2 : ?u32 = null;
+    iter = Lines.Iterator.init(input);
+    while (iter.next()) |line| {
+        const parsed = try std.fmt.parseInt(u32, line, 10);
+        if (prev_1 != null and prev_2 != null) {
+            sonar.bleep_ocean(parsed + prev_1.? + prev_2.?);
+        }
+
+        prev_2 = prev_1;
+        prev_1 = parsed;
+    }
+
+    print("Part 2 Measured {d} increases", .{sonar.increases});
 }

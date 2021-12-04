@@ -104,6 +104,10 @@ pub fn range(len: usize) []const u0 {
     return @as([*]u0, undefined)[0..len];
 }
 
+pub fn string_equals(xs: []const u8, ys: [] const u8) bool {
+    return std.mem.eql(u8, xs, ys);
+}
+
 //const testing = std.testing;
 //test "basic add functionality" {
     //try testing.expect(add(3, 7) == 10);
