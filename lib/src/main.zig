@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 
 pub const parsers = @import("parsers.zig");
 
-const utils = @import("utils.zig");
+pub const utils = @import("utils.zig");
 pub const string_equals = utils.string_equals;
 pub const range = utils.range;
 

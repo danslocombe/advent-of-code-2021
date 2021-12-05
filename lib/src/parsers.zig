@@ -5,6 +5,7 @@ const string_equals = utils.string_equals;
 const Allocator = std.mem.Allocator;
 const fixedBufferStream = std.io.fixedBufferStream;
 const FixedBufferStream = std.io.FixedBufferStream;
+const Pair = utils.Pair;
 
 fn print(comptime s : []const u8) void {
     std.debug.print(s, .{});
@@ -175,10 +176,6 @@ pub fn LinesParser(comptime Value: type, comptime Reader: type) type {
             };
         }
 
-        pub fn deinit(self : *Self) void {
-            self.lines_backing.deinit();
-        }
-
         fn parse(parser: *Parser(std.ArrayList(?Value), Reader), src: *Reader) callconv(.Inline) ParseError!?std.ArrayList(?Value) {
             const self = @fieldParentPtr(Self, "parser", parser);
 
@@ -280,7 +277,7 @@ pub fn Whitespace(comptime Value: type, comptime Reader: type) type {
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, token : Value) !Self {
+        pub fn init(allocator : *Allocator, token : Value) Self {
             return Self {
                 .allocator = allocator,
                 .token = token,
@@ -319,16 +316,57 @@ pub fn Mapper(comptime Source: type, comptime Target: type, comptime MapperType:
 
         fn parse(parser: *Parser(Target, Reader), src: *Reader) callconv(.Inline) ParseError!?Target {
             const self = @fieldParentPtr(Self, "parser", parser);
-            const result = try self.inner.parse(src);
+            var result = try self.inner.parse(src);
             if (result == null) {
                 return null;
             }
 
-            return MapperType.map(result.?);
+            return MapperType.map(&result.?);
         }
     };
 }
 
+pub fn PairParser(comptime NumType: type, comptime Reader: type) type {
+    return struct {
+        parser: Parser(Pair(NumType), Reader) = .{
+            ._parse = parse,
+        },
+
+        allocator : *Allocator,
+
+        const Self = @This();
+
+        pub fn init(allocator : *Allocator) Self {
+            return Self {
+                .allocator = allocator,
+            };
+        }
+
+        fn parse(parser: *Parser(Pair(NumType), Reader), src: *Reader) callconv(.Inline) ParseError!?Pair(NumType) {
+            const self = @fieldParentPtr(Self, "parser", parser);
+
+            var comma_parser = try Literal(NumType, Reader).init(self.allocator, 0, ",");
+            defer(comma_parser.deinit());
+            var number_parser = Number(NumType, Reader).init(self.allocator);
+
+            var chain = Chain(NumType, Reader).init(self.allocator, &.{
+                &number_parser.parser,
+                &comma_parser.parser,
+                &number_parser.parser,
+            });
+
+            const MapperType = struct {
+                pub fn map(x: *std.ArrayList(NumType)) Pair(NumType) {
+                    defer(x.deinit());
+                    return .{.x = x.items[0], .y = x.items[2]};
+                }
+            };
+
+            var mapper = Mapper(std.ArrayList(NumType), Pair(NumType), MapperType, Reader).init(&chain.parser);
+            return mapper.parser.parse(src);
+        }
+    };
+}
 
 const testing = std.testing;
 test "test parse literal" {
@@ -432,7 +470,7 @@ test "test whitespace" {
 
     var stream = fixedBufferStream("  hello");
 
-    var whitespace = try Whitespace(u32, @TypeOf(stream)).init(allocator, 10);
+    var whitespace = Whitespace(u32, @TypeOf(stream)).init(allocator, 10);
     var p = &whitespace.parser;
     const result = try p.parse(&stream);
 
@@ -468,7 +506,7 @@ test "test read numbers" {
     };
 
     var lift = Mapper(u32, ReadType, NumberToReadType, @TypeOf(stream)).init(&number_parser.parser);
-    var whitespace = try Whitespace(ReadType, @TypeOf(stream)).init(allocator, ReadType.read_whitespace);
+    var whitespace = Whitespace(ReadType, @TypeOf(stream)).init(allocator, ReadType.read_whitespace);
 
     var chain = Chain(ReadType, @TypeOf(stream)).init(allocator, &.{
         &lift.parser,

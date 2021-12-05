@@ -103,7 +103,7 @@ pub const Lines = struct {
 
 pub const LinesFromReaderError = error{
     StreamTooLong
-} || std.mem.Allocator.Error;
+} || std.mem.Allocator.Error || std.os.ReadError ;
 
 pub fn lines_from_reader(comptime Reader : type, allocator: *Allocator, src : *Reader) LinesFromReaderError!Lines {
     const all_read = try src.reader().readAllAlloc(allocator, u32_max);
