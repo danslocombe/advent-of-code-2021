@@ -39,12 +39,12 @@ pub fn Literal(comptime Token : type, comptime Reader: type) type {
 
         want: []const u8,
         buffer : [] u8,
-        allocator : *Allocator,
+        allocator : Allocator,
         token_value : Token,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, token_value : Token, want: []const u8) !Self {
+        pub fn init(allocator : Allocator, token_value : Token, want: []const u8) !Self {
             return Self{
                 .want = want,
                 .buffer = try allocator.alloc(u8, want.len),
@@ -81,11 +81,11 @@ pub fn Number(comptime NumberType : type, comptime Reader: type) type {
             ._parse = parse,
         },
 
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator) Self {
+        pub fn init(allocator : Allocator) Self {
             return Self{
                 .allocator = allocator,
             };
@@ -165,11 +165,11 @@ pub fn LinesParser(comptime Value: type, comptime Reader: type) type {
         },
 
         child: *Parser(Value, FixedBufferStream([] const u8)),
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, child: *Parser(Value, FixedBufferStream([] const u8))) Self {
+        pub fn init(allocator : Allocator, child: *Parser(Value, FixedBufferStream([] const u8))) Self {
             return .{
                 .child = child, 
                 .allocator = allocator,
@@ -203,11 +203,11 @@ pub fn Chain(comptime Value: type, comptime Reader: type) type {
         },
 
         parsers: []*Parser(Value, Reader),
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, parsers: []*Parser(Value, Reader)) Self {
+        pub fn init(allocator : Allocator, parsers: []*Parser(Value, Reader)) Self {
             return .{
                 .allocator = allocator,
                 .parsers = parsers,
@@ -240,11 +240,11 @@ pub fn OneOrMany(comptime Value: type, comptime Reader: type) type {
         },
 
         inner: *Parser(Value, Reader),
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, inner: *Parser(Value, Reader)) Self {
+        pub fn init(allocator : Allocator, inner: *Parser(Value, Reader)) Self {
             return .{
                 .allocator = allocator,
                 .inner = inner,
@@ -271,13 +271,13 @@ pub fn Whitespace(comptime Value: type, comptime Reader: type) type {
             ._parse = parse,
         },
 
-        allocator : *Allocator,
+        allocator : Allocator,
 
         token : Value,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator, token : Value) Self {
+        pub fn init(allocator : Allocator, token : Value) Self {
             return Self {
                 .allocator = allocator,
                 .token = token,
@@ -332,11 +332,11 @@ pub fn PairParser(comptime NumType: type, comptime Reader: type) type {
             ._parse = parse,
         },
 
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator) Self {
+        pub fn init(allocator : Allocator) Self {
             return Self {
                 .allocator = allocator,
             };

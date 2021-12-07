@@ -52,7 +52,7 @@ const OceanFloor = struct {
 
     const Self = @This();
 
-    pub fn init(allocator : *Allocator, width : usize, height : usize) !Self {
+    pub fn init(allocator : Allocator, width : usize, height : usize) !Self {
         var floor = try allocator.alloc(u16, width * height);
         for (floor) |_, i| {
             floor[i] = 0;
@@ -61,7 +61,7 @@ const OceanFloor = struct {
         return Self {.floor = floor, .width = width, .height = height};
     }
 
-    pub fn deinit(self : Self, allocator : *Allocator) void {
+    pub fn deinit(self : Self, allocator : Allocator) void {
         allocator.free(self.floor);
     }
 
@@ -99,11 +99,11 @@ pub fn OceanFloorLineParser(comptime Reader: type) type {
             ._parse = parse,
         },
 
-        allocator : *Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : *Allocator) Self {
+        pub fn init(allocator : Allocator) Self {
             return Self {
                 .allocator = allocator,
             };
@@ -159,7 +159,7 @@ pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    var allocator = &gpa.allocator;
+    var allocator = gpa.allocator();
 
     var input_file = try std.fs.cwd().openFile("day5_input.txt", .{});
     var line_parser = OceanFloorLineParser(std.io.FixedBufferStream([]const u8)).init(allocator);
@@ -167,6 +167,7 @@ pub fn main() anyerror!void {
 
     var result = try input_parser.parser.parse(&input_file);
 
+    var testfn = 2;
 
     var max_width : i32 = 0;
     var max_height : i32 = 0;

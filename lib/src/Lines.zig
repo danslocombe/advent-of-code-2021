@@ -16,7 +16,7 @@ pub const Lines = struct {
     lines: std.ArrayList(LineDef),
     backing_owned : bool,
 
-    pub fn from_file(allocator: *Allocator, dir: std.fs.Dir, file_name : []const u8) !Lines {
+    pub fn from_file(allocator: Allocator, dir: std.fs.Dir, file_name : []const u8) !Lines {
         const backing = try dir.readFileAlloc(allocator, file_name, u32_max);
         print("Read {d} bytes\n", .{backing.len});
         var lines = try init(allocator, backing);
@@ -24,7 +24,7 @@ pub const Lines = struct {
         return lines;
     }
 
-    pub fn init(allocator: *Allocator, backing: []const u8) !Lines {
+    pub fn init(allocator: Allocator, backing: []const u8) !Lines {
         var line_defs = std.ArrayList(LineDef).init(allocator);
 
         var line_start : usize = 0;
@@ -59,7 +59,7 @@ pub const Lines = struct {
         return Lines{.backing = backing, .lines = line_defs, .backing_owned = false};
     }
 
-    pub fn deinit(self: Lines, allocator: *Allocator) void {
+    pub fn deinit(self: Lines, allocator: Allocator) void {
         if (self.backing_owned) {
             allocator.free(self.backing);
         }
@@ -105,7 +105,7 @@ pub const LinesFromReaderError = error{
     StreamTooLong
 } || std.mem.Allocator.Error || std.os.ReadError ;
 
-pub fn lines_from_reader(comptime Reader : type, allocator: *Allocator, src : *Reader) LinesFromReaderError!Lines {
+pub fn lines_from_reader(comptime Reader : type, allocator: Allocator, src : *Reader) LinesFromReaderError!Lines {
     const all_read = try src.reader().readAllAlloc(allocator, u32_max);
     var lines = try Lines.init(allocator, all_read);
     lines.backing_owned = true;
