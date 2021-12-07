@@ -23,18 +23,8 @@ const CrabState = struct {
         };
     }
 
-    pub fn get_mean(self : CrabState) i32 {
-        var sum : f32 = 0.0;
-        for (self.crab_xs) |crab_x| {
-            sum += @intToFloat(f32, crab_x);
-        }
-
-        const mean_f = sum / @intToFloat(f32, self.crab_xs.len);
-        return @floatToInt(i32, std.math.round(mean_f));
-    }
-
     fn cost_to_move_dist(x : i32) i32 {
-        return @floatToInt(i32, (@intToFloat(f32, x) / 2.0) * @intToFloat(f32, x+1));
+        return @divFloor(x*x+x, 2);
     }
 
     pub fn get_cost_linear(self : CrabState, x : i32) i32 {
