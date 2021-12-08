@@ -11,3 +11,5 @@ pub const range = utils.range;
 const lines = @import("lines.zig");
 pub const LineDef = lines.LineDef;
 pub const Lines = lines.Lines;
+
+pub const bit_structs = @import("bit_structs.zig");
