@@ -53,12 +53,7 @@ pub fn Literal(comptime Token : type, comptime Reader: type) type {
             };
         }
 
-        pub fn deinit(self : *Self) void {
-            self.allocator.free(self.buffer);
-        }
-
         fn parse(parser: *Parser(Token, Reader), src: *Reader) callconv(.Inline) ParseError!?Token {
-            // Omg his is so hacky, how is this in a simple intro tutorial?
             // Think of a linked list in c, where you have some node embeded in a struct, then you want to get the overall struct.
             // Same thing here, we have the "parser" member in the literal struct and we want to get the literal struct.
             const self = @fieldParentPtr(Self, "parser", parser);
@@ -102,7 +97,6 @@ pub fn Number(comptime NumberType : type, comptime Reader: type) type {
             // Not super efficient
 
             var read_bytes = std.ArrayList(u8).init(self.allocator);
-            defer(read_bytes.deinit());
 
             var single_byte_buffer : [1]u8 = undefined;
 
@@ -123,6 +117,28 @@ pub fn Number(comptime NumberType : type, comptime Reader: type) type {
                 try src.seekableStream().seekBy(-@intCast(i64, read_bytes.items.len));
                 return null;
             };
+        }
+    };
+}
+
+pub fn SingleChar(comptime Reader: type) type {
+    return struct {
+        parser: Parser(u8, Reader) = .{
+            ._parse = parse,
+        },
+
+        const Self = @This();
+
+        pub fn init() Self {return .{};}
+
+        fn parse(_: *Parser(u8, Reader), src: *Reader) callconv(.Inline) ParseError!?u8 {
+            var single_byte_buffer : [1]u8 = undefined;
+            if ((try src.read(&single_byte_buffer)) > 0) {
+                return single_byte_buffer[0];
+            }
+            else {
+                return null;
+            }
         }
     };
 }
@@ -181,7 +197,6 @@ pub fn LinesParser(comptime Value: type, comptime Reader: type) type {
 
             // In theory could read one by one, but is easier to just allocat into Lines block.
             var read_lines = try lines.lines_from_reader(Reader, self.allocator, src);
-            defer(read_lines.deinit(self.allocator));
 
             var results = std.ArrayList(?Value).init(self.allocator);
 
@@ -265,38 +280,91 @@ pub fn OneOrMany(comptime Value: type, comptime Reader: type) type {
     };
 }
 
-pub fn Whitespace(comptime Value: type, comptime Reader: type) type {
+const OptionalParserResultType = enum {
+    some,
+    none,
+};
+
+pub fn OptionalParserResult(comptime T: type) type {
+    return union(OptionalParserResultType) {
+        some: T,
+        none: void,
+    };
+}
+
+pub fn OptionalLifter(comptime T: type) type {
     return struct {
-        parser: Parser(Value, Reader) = .{
+        pub fn map(x : T) OptionalParserResult(T) {
+            return OptionalParserResult(T) {.some = x};
+        }
+    };
+}
+
+pub fn Optional(comptime Value: type, comptime Reader: type) type {
+    const OptT = OptionalParserResult(Value);
+
+    return struct {
+        parser: Parser(OptT, Reader) = .{
+            ._parse = parse,
+        },
+
+        inner: *Parser(Value, Reader),
+
+        const Self = @This();
+
+        pub fn init(inner: *Parser(Value, Reader)) Self {
+            return .{
+                .inner = inner,
+            };
+        }
+
+        fn parse(parser: *Parser(OptT, Reader), src: *Reader) callconv(.Inline) ParseError!?OptT {
+            const self = @fieldParentPtr(Self, "parser", parser);
+
+            if (try self.inner.parse(src)) |result| {
+                return OptT{.some = result};
+            }
+            else {
+                return OptT{.none = .{}};
+            }
+        }
+    };
+}
+
+pub fn Whitespace(comptime T : type, comptime Reader: type) type {
+    return struct {
+        parser: Parser(T, Reader) = .{
             ._parse = parse,
         },
 
         allocator : Allocator,
-
-        token : Value,
+        val : T,
 
         const Self = @This();
 
-        pub fn init(allocator : Allocator, token : Value) Self {
+        pub fn init(allocator : Allocator, val : T) Self {
             return Self {
                 .allocator = allocator,
-                .token = token,
+                .val = val,
             };
         }
 
-        fn parse(parser: *Parser(Value, Reader), src: *Reader) callconv(.Inline) ParseError!?Value {
+        fn parse(parser: *Parser(T, Reader), src: *Reader) callconv(.Inline) ParseError!?T {
             const self = @fieldParentPtr(Self, "parser", parser);
 
             var space_literal_parser = try Literal(void, Reader).init(self.allocator, .{}, " ");
-            defer(space_literal_parser.deinit());
             var one_or_many = OneOrMany(void, Reader).init(self.allocator, &space_literal_parser.parser);
 
             const result = try one_or_many.parser.parse(src);
-            defer(result.?.deinit());
-            return self.token;
+            if (result == null) {
+                return null;
+            }
+
+            return self.val;
         }
     };
 }
+
 
 pub fn Mapper(comptime Source: type, comptime Target: type, comptime MapperType: type, comptime Reader: type) type {
     return struct {
@@ -321,7 +389,7 @@ pub fn Mapper(comptime Source: type, comptime Target: type, comptime MapperType:
                 return null;
             }
 
-            return MapperType.map(&result.?);
+            return MapperType.map(result.?);
         }
     };
 }
@@ -346,7 +414,6 @@ pub fn PairParser(comptime NumType: type, comptime Reader: type) type {
             const self = @fieldParentPtr(Self, "parser", parser);
 
             var comma_parser = try Literal(NumType, Reader).init(self.allocator, 0, ",");
-            defer(comma_parser.deinit());
             var number_parser = Number(NumType, Reader).init(self.allocator);
 
             var chain = Chain(NumType, Reader).init(self.allocator, &.{
@@ -356,8 +423,7 @@ pub fn PairParser(comptime NumType: type, comptime Reader: type) type {
             });
 
             const MapperType = struct {
-                pub fn map(x: *std.ArrayList(NumType)) Pair(NumType) {
-                    defer(x.deinit());
+                pub fn map(x: std.ArrayList(NumType)) Pair(NumType) {
                     return .{.x = x.items[0], .y = x.items[2]};
                 }
             };
@@ -368,13 +434,96 @@ pub fn PairParser(comptime NumType: type, comptime Reader: type) type {
     };
 }
 
+//pub fn MapTakeFirst(comptime T : type, comptime Reader : type) type {
+//    return struct {
+//        parser: Parser(T, Reader) = .{
+//            ._parse = parse,
+//        },
+//
+//        const Self = @This();
+//        pub fn init() Self { return .{};}
+//        fn parse(parser: *Parser(T, Reader), src: *Reader) callconv(.Inline) ParseError!?T {
+//            const SMapper = struct {
+//                pub fn map(xs : std.ArrayList(T)) T {
+//                    return xs.items[0];
+//                }
+//            };
+//
+//            var parser = Mapper(std.ArrayList(T), T, SMapper).init(inner);
+//            return parser.parser.parse(src);
+//        }
+//    };
+//}
+
+pub fn SepByWhitespace(comptime T : type, comptime Reader : type) type {
+    return struct {
+        parser: Parser(std.ArrayList(T), Reader) = .{
+            ._parse = parse,
+        },
+
+        allocator : Allocator,
+        inner : *Parser(T, Reader),
+
+        const Self = @This();
+        pub fn init(allocator : Allocator, inner : *Parser(T, Reader)) Self {
+            return .{.allocator = allocator, .inner = inner };
+        } 
+
+        fn parse(parser: *Parser(std.ArrayList(T), Reader), src: *Reader) callconv(.Inline) ParseError!?std.ArrayList(T) {
+            const self = @fieldParentPtr(Self, "parser", parser);
+
+            const ReadTagType = enum {
+                read_whitespace,
+                read_inner,
+            };
+
+            const ReadType = union(ReadTagType) {
+                read_whitespace: void,
+                read_inner: T,
+            };
+
+            const InnerToReadType = struct {
+                pub fn map(x: T) ReadType {
+                    return ReadType{.read_inner = x};
+                }
+            };
+
+            const OptionalToReadType = struct {
+                pub fn map(_: OptionalParserResult(void)) ReadType {
+                    return .{.read_whitespace=.{}};
+                }
+            };
+
+            var lift = Mapper(T, ReadType, InnerToReadType, Reader).init(self.inner);
+            var whitespace = Whitespace(void, Reader).init(self.allocator, .{});
+            var opt_whitespace = Optional(void, Reader).init(&whitespace.parser);
+            var white_lift = Mapper(OptionalParserResult(void), ReadType, OptionalToReadType, Reader).init(&opt_whitespace.parser);
+
+            var chain = Chain(ReadType, Reader).init(self.allocator, &.{
+                &lift.parser,
+                &white_lift.parser,
+                });
+
+            const ExtractMap = struct {
+                pub fn map(x : std.ArrayList(ReadType)) T {
+                    return x.items[0].read_inner;
+                }
+            };
+
+            var extract = Mapper(std.ArrayList(ReadType), T, ExtractMap, Reader).init(&chain.parser);
+
+            var one_or_many = OneOrMany(T, Reader).init(self.allocator, &extract.parser);
+            return one_or_many.parser.parse(src);
+        }
+    };
+}
+
 const testing = std.testing;
 test "test parse literal" {
     var allocator = std.testing.allocator; 
     var stream = fixedBufferStream("hello there");
 
     var literal_parser = try Literal(u32, @TypeOf(stream)).init(allocator, 49, "hello");
-    defer(literal_parser.deinit());
     var p = &literal_parser.parser;
     const result = try p.parse(&stream);
 
@@ -392,9 +541,7 @@ test "test parse one of" {
     var stream = fixedBufferStream("hello there");
 
     var cat_parser = try Literal(u32, @TypeOf(stream)).init(allocator, 25, "cat");
-    defer(cat_parser.deinit());
     var hello_parser = try Literal(u32, @TypeOf(stream)).init(allocator, 49, "hello");
-    defer(hello_parser.deinit());
 
     var one_of_parser = OneOf(u32, @TypeOf(stream)).init(&.{
         &cat_parser.parser,
@@ -417,7 +564,6 @@ test "test parse lines" {
     var stream = fixedBufferStream("hello there\nhello there\r\nno hello");
 
     var hello_parser = try Literal(u32, FixedBufferStream([] const u8)).init(allocator, 49, "hello");
-    defer(hello_parser.deinit());
 
     var lines_parser = LinesParser(u32, @TypeOf(stream)).init(allocator, &hello_parser.parser);
     var p = &lines_parser.parser;
@@ -425,7 +571,6 @@ test "test parse lines" {
 
     try testing.expect(result != null);
 
-    defer(result.?.deinit());
 
     try testing.expect(result.?.items.len == 3);
     try testing.expect(result.?.items[0].? == 49);
@@ -443,10 +588,8 @@ test "test parse chain" {
     var stream = fixedBufferStream("hellothere");
 
     var hello_parser = try Literal(u32, @TypeOf(stream)).init(allocator, 49, "hello");
-    defer(hello_parser.deinit());
 
     var there_parser = try Literal(u32, @TypeOf(stream)).init(allocator, 10, "there");
-    defer(there_parser.deinit());
 
     var chain = Chain(u32, @TypeOf(stream)).init(allocator, &.{&hello_parser.parser, &there_parser.parser});
     var p = &chain.parser;
@@ -454,7 +597,6 @@ test "test parse chain" {
 
     try testing.expect(result != null);
 
-    defer(result.?.deinit());
 
     try testing.expect(result.?.items.len == 2);
     try testing.expect(result.?.items[0] == 49);
@@ -470,12 +612,12 @@ test "test whitespace" {
 
     var stream = fixedBufferStream("  hello");
 
-    var whitespace = Whitespace(u32, @TypeOf(stream)).init(allocator, 10);
+    var whitespace = Whitespace(void, @TypeOf(stream)).init(allocator, .{});
     var p = &whitespace.parser;
     const result = try p.parse(&stream);
 
     try testing.expect(result != null);
-    try testing.expect(result.? == 10);
+    try testing.expect(result.? == void{});
 
     const rest = try stream.reader().readAllAlloc(allocator, 1000);
     defer(allocator.free(rest));
@@ -518,7 +660,6 @@ test "test read numbers" {
     const result = try p.parse(&stream);
 
     try testing.expect(result != null);
-    defer(result.?.deinit());
 
     try testing.expect(result.?.items[0] == ReadType.read_number);
     try testing.expect(result.?.items[0].read_number == 10);
@@ -528,4 +669,24 @@ test "test read numbers" {
     const rest = try stream.reader().readAllAlloc(allocator, 1000);
     defer(allocator.free(rest));
     try testing.expect(rest.len == 0);
+}
+
+test "test sep by whitespace" {
+    var allocator = std.testing.allocator; 
+    var stream = fixedBufferStream("10  30 50 23 10  ");
+
+    var number_parser = Number(u32, @TypeOf(stream)).init(allocator);
+    var parser = SepByWhitespace(u32, @TypeOf(stream)).init(allocator, &number_parser.parser);
+
+    var p = &parser.parser;
+    const result = try p.parse(&stream);
+
+    try testing.expect(result != null);
+
+    try testing.expect(result.?.items.len == 5);
+    try testing.expect(result.?.items[0] == 10);
+    try testing.expect(result.?.items[1] == 30);
+    try testing.expect(result.?.items[2] == 50);
+    try testing.expect(result.?.items[3] == 23);
+    try testing.expect(result.?.items[4] == 10);
 }
