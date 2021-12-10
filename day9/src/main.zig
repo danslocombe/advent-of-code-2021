@@ -66,7 +66,7 @@ const Heightmap = struct {
         var sum : u32 = 0;
         for (self.values) |val, i| {
             if (self.is_low_point(i)) {
-                std.log.info("{d} ({d}) is a low point", .{val, i});
+                //std.log.info("{d} ({d}) is a low point", .{val, i});
                 sum += @intCast(u32, 1 + val);
             }
         }
@@ -162,10 +162,10 @@ const Heightmap = struct {
                         r.*.tag = @minimum(r.*.tag, pr.*.tag);
                     }
                 }
-            }
 
-            for (previous.ranges.items) |*pr| {
                 if (pr.*.area > 0) {
+                    // There is still area untransferred
+                    // First try and move sideways
                     for (self.ranges.items) |*r| {
                         if (r.*.tag == pr.tag) {
                             r.*.area += pr.*.area;
@@ -174,6 +174,7 @@ const Heightmap = struct {
                         }
                     }
 
+                    // Nowhere to move, complete basin
                     if (pr.*.area > 0) {
                         try basins.update(pr.*.area);
                     }
