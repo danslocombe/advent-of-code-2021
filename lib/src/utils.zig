@@ -83,4 +83,14 @@ pub const ByteGrid = struct {
     pub fn get_line(self : ByteGrid, y : usize) []u8 {
         return self.values[y*self.width..(y+1)*self.width];
     }
+
+    pub fn clone(self : ByteGrid, allocator : std.mem.Allocator) !ByteGrid {
+        var copied = try allocator.alloc(u8, self.values.len);
+        std.mem.copy(u8, copied, self.values);
+        return ByteGrid {
+            .values = copied,
+            .width = self.width,
+            .height = self.height,
+        };
+    }
 };

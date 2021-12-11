@@ -31,7 +31,7 @@ const DumboOctoField = struct {
 
     fn flash(self : *DumboOctoField, i : usize) void {
         const cur_pos = self.grid.i_to_pos(i);
-        const adjacent_poses = [_] ByteGrid.Pos {
+        const adjacent_poses = [8] ByteGrid.Pos {
             .{.x = -1, .y =  -1},
             .{.x = -1, .y =  0},
             .{.x = -1, .y =  1},
@@ -54,6 +54,38 @@ const DumboOctoField = struct {
     }
 };
 
+const RunArgs = struct {
+    allocator : Allocator,
+    parsed_grid : ByteGrid,
+};
+
+pub fn run(args : RunArgs) callconv(.Inline) anyerror!usize {
+    const allocator = args.allocator;
+    var field = DumboOctoField.init(try args.parsed_grid.clone(allocator), allocator);
+
+    //var total_flashes : u32 = 0;
+    for (dan_lib.range(10000)) |_, i| {
+        const flashes = field.tick();
+        //total_flashes += flashes;
+        //std.log.info("{d} Flashes {d}, total {d}", .{i, flashes, total_flashes});
+
+        if (flashes == 100) {
+            return i+1;
+        }
+    }
+
+    return 0;
+}
+
+pub fn benchmark(allocator : Allocator, grid : ByteGrid) !void {
+    const benchmarks = try dan_lib.benchmarking.Benchmarks(RunArgs, anyerror!usize).generate(allocator, .{
+        .f = run,
+        .f_args = .{.allocator = allocator, .parsed_grid = grid},
+    });
+
+    benchmarks.print();
+}
+
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
@@ -61,16 +93,7 @@ pub fn main() anyerror!void {
 
     var input_file = try std.fs.cwd().openFile("input.txt", .{});
     const grid = try ByteGrid.parse(@TypeOf(input_file), &input_file, arena.allocator());
-    var field = DumboOctoField.init(grid, arena.allocator());
 
-    var total_flashes : u32 = 0;
-    for (dan_lib.range(10000)) |_, i| {
-        const flashes = field.tick();
-        total_flashes += flashes;
-        std.log.info("{d} Flashes {d}, total {d}", .{i, flashes, total_flashes});
-
-        if (flashes == 100) {
-            break;
-        }
-    }
+    //run(.{.allocator = arena.allocator(), .parsed_grid = grid});
+    try benchmark(arena.allocator(), grid);
 }

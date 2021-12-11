@@ -13,3 +13,4 @@ pub const LineDef = lines.LineDef;
 pub const Lines = lines.Lines;
 
 pub const bit_structs = @import("bit_structs.zig");
+pub const benchmarking = @import("benchmarking.zig");
