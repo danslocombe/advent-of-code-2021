@@ -52,31 +52,42 @@ const Edge = struct {
 };
 
 const Path = struct {
-    prev : ?* const Path,
+    //prev : ?* const Path,
     value : usize,
     double_visit : bool,
+    small_cave_seen_bits : u32,
 
-    fn contains(self : Path, cave_rank : usize) bool {
-        return contains_inner(&self, cave_rank);
+    //fn contains(self : Path, cave_rank : usize) bool {
+    //    return contains_inner(&self, cave_rank);
+    //}
+
+    //fn contains_inner(self : ?*const Path, cave_rank : usize) bool {
+    //    var cur : ?*const Path = self;
+    //    while (cur) |node| {
+    //        if (node.*.value == cave_rank) {
+    //            return true;
+    //        }
+
+    //        cur = node.*.prev;
+    //    }
+
+    //    return false;
+    //}
+
+    fn to_mask(cave_rank : usize) u32 {
+        const one : u32 = 1;
+        return one << @intCast(u5, cave_rank);
     }
 
-    fn contains_inner(self : ?*const Path, cave_rank : usize) bool {
-        var cur : ?*const Path = self;
-        while (cur) |node| {
-            if (node.*.value == cave_rank) {
-                return true;
-            }
-
-            cur = node.*.prev;
-        }
-
-        return false;
+    fn contains(self : Path, cave_rank : usize) bool {
+        return (self.small_cave_seen_bits & (to_mask(cave_rank))) != 0;
     }
 
     pub fn try_append(self : *const Path, allocator : Allocator, system : CaveSystem, cave_rank : usize) !?*Path {
         const cave = system.caves[cave_rank];
 
         var double_visit = self.double_visit;
+        var small_cave_seen_bits = self.small_cave_seen_bits;
 
         switch (cave.cave_type) {
             // Cant go back to the start
@@ -91,14 +102,17 @@ const Path = struct {
                         return null;
                     }
                 }
+
+                small_cave_seen_bits |= to_mask(cave_rank);
             },
             else => {},
         }
 
         var new = &(try allocator.alloc(Path, 1))[0];
-        new.*.prev = self;
+        //new.*.prev = self;
         new.*.double_visit = double_visit;
         new.*.value = cave_rank;
+        new.*.small_cave_seen_bits = small_cave_seen_bits;
         return new;
     }
 };
@@ -109,11 +123,14 @@ const CaveSystem = struct {
     caves : []const Cave,
     edges : []const Edge,
 
-    pub fn find_paths(self : CaveSystem, allocator : Allocator) !std.ArrayList(*const Path) {
-        var completed_paths = try std.ArrayList(*const Path).initCapacity(allocator, 512);
+    //pub fn find_paths(self : CaveSystem, allocator : Allocator) !std.ArrayList(*const Path) {
+    pub fn find_paths(self : CaveSystem, allocator : Allocator) !u32 {
+        //var completed_paths = try std.ArrayList(*const Path).initCapacity(allocator, 512);
+        var completed_count : u32 = 0;
         var path_stack = try std.ArrayList(*const Path).initCapacity(allocator, 512);
 
-        var init_path = Path {.prev = null, .double_visit = false, .value = self.start};
+        //var init_path = Path {.prev = null, .double_visit = false, .value = self.start, .small_cave_seen_bits = 0};
+        var init_path = Path {.double_visit = false, .value = self.start, .small_cave_seen_bits = 0};
         try path_stack.append(&init_path);
 
         while (path_stack.items.len > 0) {
@@ -123,7 +140,8 @@ const CaveSystem = struct {
 
             // Is at end?
             if (last_cave == self.end) {
-                try completed_paths.append(top);
+                //try completed_paths.append(top);
+                completed_count+=1;
                 continue;
             }
 
@@ -141,7 +159,8 @@ const CaveSystem = struct {
             }
         }
 
-        return completed_paths;
+        //return completed_paths;
+        return completed_count;
     }
 
     pub fn parse(allocator : Allocator, filename : []const u8) !CaveSystem {
@@ -196,7 +215,8 @@ pub fn do_puzzle() anyerror!void {
     //for (paths.items) |path| {
         //std.log.info("Found path {any}", .{path.cave_ranks.items});
     //}
-    std.log.err("Found {d} paths", .{paths.items.len});
+    //std.log.err("Found {d} paths", .{paths.items.len});
+    std.log.err("Found {d} paths", .{paths});
 }
 
 const RunArgs = struct {
@@ -205,7 +225,8 @@ const RunArgs = struct {
 
 pub fn run(allocator : Allocator, args : RunArgs) callconv(.Inline) anyerror!usize {
     const paths = try args.caves.find_paths(allocator);
-    return paths.items.len;
+    return paths;
+    //return paths.items.len;
 }
 
 pub fn benchmark() !void {
@@ -214,6 +235,15 @@ pub fn benchmark() !void {
     defer parse_arena.deinit();
 
     const caves = try CaveSystem.parse(parse_arena.allocator(), "input.txt");
+
+    var count : u32 = 0;
+    for (caves.caves) |_| {
+        //if (c.cave_type == CaveType.small) {
+            count += 1;
+        //}
+    }
+
+    std.log.err("Small cave count {d}", .{count});
 
     var benchmarks = try dan_lib.benchmarking.Benchmarks(RunArgs, anyerror!usize).generate(gpa.allocator(), .{
         .f = run,
