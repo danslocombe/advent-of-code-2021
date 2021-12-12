@@ -99,6 +99,10 @@ pub const Lines = struct {
             return str;
         }
     };
+
+    pub fn iter(self :Lines) Iterator {
+        return Iterator.init(self);
+    }
 };
 
 pub const LinesFromReaderError = error{

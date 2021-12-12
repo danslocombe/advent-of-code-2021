@@ -94,3 +94,12 @@ pub const ByteGrid = struct {
         };
     }
 };
+
+pub fn copy_list(comptime T : type, allocator : std.mem.Allocator, xs : std.ArrayList(T)) !std.ArrayList(T) {
+    var new = try std.ArrayList(T).initCapacity(allocator, xs.items.len);
+    for (xs.items) |x| {
+        try new.append(x);
+    }
+
+    return new;
+}
