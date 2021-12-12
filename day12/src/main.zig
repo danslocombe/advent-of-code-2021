@@ -52,38 +52,54 @@ const Edge = struct {
 };
 
 const Path = struct {
-    cave_ranks : std.ArrayList(usize),
-    double_visit : ?usize,
+    prev : ?* const Path,
+    value : usize,
+    double_visit : bool,
 
-    pub fn try_append(self : Path, allocator : Allocator, system : CaveSystem, cave_rank : usize) !?Path {
+    fn contains(self : Path, cave_rank : usize) bool {
+        return contains_inner(&self, cave_rank);
+    }
+
+    fn contains_inner(self : ?*const Path, cave_rank : usize) bool {
+        var cur : ?*const Path = self;
+        while (cur) |node| {
+            if (node.*.value == cave_rank) {
+                return true;
+            }
+
+            cur = node.*.prev;
+        }
+
+        return false;
+    }
+
+    pub fn try_append(self : *const Path, allocator : Allocator, system : CaveSystem, cave_rank : usize) !?*Path {
         const cave = system.caves[cave_rank];
 
-        var double_visit : ?usize = self.double_visit;
+        var double_visit = self.double_visit;
 
         switch (cave.cave_type) {
             // Cant go back to the start
             CaveType.start => return null,
             CaveType.small => {
                 // Check if we've already visited
-                for (self.cave_ranks.items) |prev_cave_rank| {
-                    if (prev_cave_rank == cave_rank) {
-                        if (double_visit == null) {
-                            double_visit = cave_rank;
-                            break;
-                        }
-                        else {
-                            return null;
-                        }
+                if (self.contains(cave_rank)) {
+                    if (!double_visit) {
+                        double_visit = true;
+                    }
+                    else {
+                        return null;
                     }
                 }
             },
             else => {},
         }
 
-        // Clone and append
-        var new = try dan_lib.utils.copy_list(usize, allocator, self.cave_ranks);
-        try new.append(cave_rank);
-        return Path {.cave_ranks = new, .double_visit = double_visit};
+        var new = &(try allocator.alloc(Path, 1))[0];
+        new.*.prev = self;
+        new.*.double_visit = double_visit;
+        new.*.value = cave_rank;
+        return new;
     }
 };
 
@@ -93,18 +109,17 @@ const CaveSystem = struct {
     caves : []const Cave,
     edges : []const Edge,
 
-    pub fn find_paths(self : CaveSystem, allocator : Allocator) !std.ArrayList(Path) {
-        var completed_paths = std.ArrayList(Path).init(allocator);
-        var path_stack = std.ArrayList(Path).init(allocator);
+    pub fn find_paths(self : CaveSystem, allocator : Allocator) !std.ArrayList(*const Path) {
+        var completed_paths = try std.ArrayList(*const Path).initCapacity(allocator, 512);
+        var path_stack = try std.ArrayList(*const Path).initCapacity(allocator, 512);
 
-        var init_path = Path {.cave_ranks = std.ArrayList(usize).init(allocator), .double_visit = null};
-        try init_path.cave_ranks.append(self.start);
-        try path_stack.append(init_path);
+        var init_path = Path {.prev = null, .double_visit = false, .value = self.start};
+        try path_stack.append(&init_path);
 
         while (path_stack.items.len > 0) {
             const top = path_stack.pop();
 
-            const last_cave = top.cave_ranks.items[top.cave_ranks.items.len - 1];
+            const last_cave = top.*.value;
 
             // Is at end?
             if (last_cave == self.end) {
@@ -124,8 +139,6 @@ const CaveSystem = struct {
                     }
                 }
             }
-
-            top.cave_ranks.deinit();
         }
 
         return completed_paths;
@@ -173,19 +186,45 @@ const CaveSystem = struct {
     }
 };
 
-pub fn main() anyerror!void {
+pub fn do_puzzle() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
 
     const cave = try CaveSystem.parse(arena.allocator(), "input.txt");
     const paths = try cave.find_paths(arena.allocator());
-    for (paths.items) |path| {
-        std.log.info("Found path {any}", .{path.cave_ranks.items});
-    }
+    //for (paths.items) |path| {
+        //std.log.info("Found path {any}", .{path.cave_ranks.items});
+    //}
     std.log.err("Found {d} paths", .{paths.items.len});
 }
 
-test "basic test" {
-    try std.testing.expectEqual(10, 3 + 7);
+const RunArgs = struct {
+    caves : CaveSystem
+};
+
+pub fn run(allocator : Allocator, args : RunArgs) callconv(.Inline) anyerror!usize {
+    const paths = try args.caves.find_paths(allocator);
+    return paths.items.len;
+}
+
+pub fn benchmark() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var parse_arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer parse_arena.deinit();
+
+    const caves = try CaveSystem.parse(parse_arena.allocator(), "input.txt");
+
+    var benchmarks = try dan_lib.benchmarking.Benchmarks(RunArgs, anyerror!usize).generate(gpa.allocator(), .{
+        .f = run,
+        .f_args = .{.caves = caves},
+        .iters = 100,
+    });
+
+    benchmarks.print();
+}
+
+pub fn main() anyerror!void {
+    //try do_puzzle();
+    try benchmark();
 }

@@ -11,15 +11,17 @@ pub fn Benchmarks(comptime Args: type, comptime RetType : type) type {
 
         const Self = @This();
 
-        pub fn generate(allocator : std.mem.Allocator, args : struct {f : fn (Args) callconv(.Inline) RetType, f_args : Args, iters : usize = 10000}) !Self {
-            var samples = try allocator.alloc(u64, args.iters);
+        pub fn generate(gpa_allocator : std.mem.Allocator, args : struct {f : fn (std.mem.Allocator, Args) callconv(.Inline) RetType, f_args : Args, iters : usize = 10000}) !Self {
+            var samples = try gpa_allocator.alloc(u64, args.iters);
 
             var timer = try std.time.Timer.start();
             std.log.err("Starting benchmark run, {d} iters", .{args.iters});
             for (utils.range(args.iters)) |_, i| {
+                var run_arena = std.heap.ArenaAllocator.init(gpa_allocator);
                 timer.reset();
-                std.mem.doNotOptimizeAway(args.f(args.f_args));
+                std.mem.doNotOptimizeAway(args.f(run_arena.allocator(), args.f_args));
                 samples[i] = timer.read();
+                run_arena.deinit();
             }
 
             std.sort.sort(u64, samples, void{}, cmp);
