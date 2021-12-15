@@ -103,3 +103,59 @@ pub fn copy_list(comptime T : type, allocator : std.mem.Allocator, xs : std.Arra
 
     return new;
 }
+
+pub fn PrimativeComparer(comptime T : type) type {
+    return struct {
+        pub fn cmp(_ : void, x : T, y : T) bool {
+            return x < y;
+        }
+    };
+}
+
+pub fn BucketCounter(comptime T : type) type {
+    return struct {
+        hashmap : std.AutoHashMap(T, u64),
+        allocator : std.mem.Allocator,
+
+        const Self = @This();
+
+        pub fn init(allocator : std.mem.Allocator) Self {
+            return .{
+                .allocator = allocator,
+                .hashmap = std.AutoHashMap(T, u64).init(allocator),
+            };
+        }
+
+        pub fn add(self : *Self, x : T, count : u64) !void {
+            if (self.*.hashmap.getPtr(x)) |existing| {
+                existing.* += count;
+            }
+            else {
+                try self.*.hashmap.put(x, count);
+            }
+        }
+
+        pub const Bucket = struct {
+            value : T,
+            sum : u64,
+        };
+
+        fn sum_cmp (_ : void, x : Bucket, y : Bucket) bool {
+            return x.sum < y.sum;
+        }
+
+        pub fn get_buckets(self : Self) !std.ArrayList(Bucket) {
+            var buckets = std.ArrayList(Bucket).init(self.allocator);
+            var iter = self.hashmap.iterator();
+            while (iter.next()) |kv| {
+                try buckets.append(Bucket{
+                    .value = kv.key_ptr.*,
+                    .sum = kv.value_ptr.*,
+                });
+            }
+
+            std.sort.sort(Bucket, buckets.items, void{}, sum_cmp);
+            return buckets;
+        }
+    };
+}
