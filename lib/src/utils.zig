@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub fn string_equals(xs: []const u8, ys: [] const u8) bool {
     return std.mem.eql(u8, xs, ys);
@@ -15,6 +16,13 @@ pub fn Pair(comptime NumType: type) type {
         y : NumType,
 
         const Self = @This();
+
+        pub fn init(x : anytype, y : anytype) Self {
+            return .{
+                .x = @intCast(NumType, x),
+                .y = @intCast(NumType, y),
+            };
+        }
 
         pub fn add(self : Self, other : Self) Self {
             return .{.x = self.x + other.x, .y = self.y + other.y};
@@ -33,15 +41,15 @@ pub const ByteGrid = struct {
 
     pub const Pos = Pair(i32);
 
-    pub fn init(allocator : std.mem.Allocator, width : usize, height : usize) !ByteGrid {
+    pub fn init(allocator : Allocator, width : usize, height : usize) !ByteGrid {
         return ByteGrid {
-            .values = allocator.allocate(u8, width * height),
+            .values = try allocator.alloc(u8, width * height),
             .width = width,
             .height = height,
         };
     }
 
-    pub fn parse(comptime Reader : type, reader : *Reader, allocator : std.mem.Allocator) !ByteGrid {
+    pub fn parse(comptime Reader : type, reader : *Reader, allocator : Allocator) !ByteGrid {
         const dan_parsers = @import("parsers.zig");
         const FBSType = std.io.FixedBufferStream([] const u8);
 
@@ -84,7 +92,7 @@ pub const ByteGrid = struct {
         return self.values[y*self.width..(y+1)*self.width];
     }
 
-    pub fn clone(self : ByteGrid, allocator : std.mem.Allocator) !ByteGrid {
+    pub fn clone(self : ByteGrid, allocator : Allocator) !ByteGrid {
         var copied = try allocator.alloc(u8, self.values.len);
         std.mem.copy(u8, copied, self.values);
         return ByteGrid {
@@ -95,7 +103,7 @@ pub const ByteGrid = struct {
     }
 };
 
-pub fn copy_list(comptime T : type, allocator : std.mem.Allocator, xs : std.ArrayList(T)) !std.ArrayList(T) {
+pub fn copy_list(comptime T : type, allocator : Allocator, xs : std.ArrayList(T)) !std.ArrayList(T) {
     var new = try std.ArrayList(T).initCapacity(allocator, xs.items.len);
     for (xs.items) |x| {
         try new.append(x);
@@ -115,11 +123,11 @@ pub fn PrimativeComparer(comptime T : type) type {
 pub fn BucketCounter(comptime T : type) type {
     return struct {
         hashmap : std.AutoHashMap(T, u64),
-        allocator : std.mem.Allocator,
+        allocator : Allocator,
 
         const Self = @This();
 
-        pub fn init(allocator : std.mem.Allocator) Self {
+        pub fn init(allocator : Allocator) Self {
             return .{
                 .allocator = allocator,
                 .hashmap = std.AutoHashMap(T, u64).init(allocator),
@@ -156,6 +164,42 @@ pub fn BucketCounter(comptime T : type) type {
 
             std.sort.sort(Bucket, buckets.items, void{}, sum_cmp);
             return buckets;
+        }
+    };
+}
+
+pub fn UIntMap(comptime T : type) type {
+    return struct {
+        xs : std.ArrayList(?T),
+        const Self  = @This();
+        pub fn init(allocator : Allocator) Self {
+            return .{.xs = std.ArrayList(?T).init(allocator)};
+        }
+
+        pub fn set(self : *Self, k : usize, v : T) !void {
+            while (k >= self.*.xs.items.len) {
+                // TODO replace with appendNTimes
+                try self.*.xs.append(null);
+            }
+
+            self.*.xs.items[k] = v;
+        }
+
+        pub fn get(self : Self, k : usize) ?T {
+            if (k < self.xs.items.len) {
+                return self.xs.items[k];
+            }
+
+            return null;
+        }
+
+        pub fn get_set(self : *Self, k : usize, v : T) !bool {
+            if (self.get(k)) |_| {
+                return false;
+            }
+
+            try self.set(k, v);
+            return true;
         }
     };
 }
